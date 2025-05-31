@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Denúncias de Infraestrutura Urbana</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5; /* Cor de fundo suave */
+        }
+        /* Estilos para o scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #e2e8f0;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center py-8 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-4xl w-full bg-white shadow-lg rounded-lg p-6 sm:p-8 space-y-8">
+        <header class="text-center">
+            <h1 class="text-3xl sm:text-4xl font-bold text-gray-800 mb-2">Sistema de Denúncias de Infraestrutura Urbana</h1>
+            <p class="text-gray-600 text-lg">Reporte e acompanhe problemas na sua cidade.</p>
+        </header>
+
+        <section class="bg-blue-50 p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-semibold text-blue-700 mb-4">Reportar um Novo Problema</h2>
+            <form id="denunciaForm" class="space-y-4">
+                <div>
+                    <label for="descricao" class="block text-gray-700 text-sm font-medium mb-1">Descrição do Problema:</label>
+                    <textarea id="descricao" rows="3" class="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out" placeholder="Ex: Buraco grande na Rua das Flores, próximo ao número 123." required></textarea>
+                </div>
+                <div>
+                    <label for="categoria" class="block text-gray-700 text-sm font-medium mb-1">Categoria:</label>
+                    <select id="categoria" class="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out" required>
+                        <option value="">Selecione uma categoria</option>
+                        <option value="Buraco na Via">Buraco na Via</option>
+                        <option value="Iluminação Pública">Iluminação Pública</option>
+                        <option value="Descarte de Lixo Irregular">Descarte de Lixo Irregular</option>
+                        <option value="Calçada Danificada">Calçada Danificada</option>
+                        <option value="Árvore Caída/Poda">Árvore Caída/Poda</option>
+                        <option value="Sinalização Danificada">Sinalização Danificada</option>
+                        <option value="Outro">Outro</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="localizacao" class="block text-gray-700 text-sm font-medium mb-1">Localização (Endereço/Ponto de Referência):</label>
+                    <input type="text" id="localizacao" class="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out" placeholder="Ex: Rua das Rosas, 456, Centro" required>
+                </div>
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-md shadow-md transition duration-300 ease-in-out transform hover:scale-105">
+                        Registrar Denúncia
+                    </button>
+                    <button type="button" id="gerarAleatorioBtn" class="flex-1 bg-gray-400 hover:bg-gray-500 text-white font-bold py-3 px-6 rounded-md shadow-md transition duration-300 ease-in-out transform hover:scale-105">
+                        Gerar Denúncia Aleatória
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <section class="bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4">Denúncias Registradas</h2>
+            <div id="listaDenuncias" class="space-y-4">
+                <p class="text-center text-gray-500" id="noDenunciasMessage">Nenhuma denúncia registrada ainda.</p>
+            </div>
+        </section>
+    </div>
+
+    <div id="messageModal" class="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50 hidden">
+        <div class="bg-white p-8 rounded-lg shadow-xl max-w-sm w-full text-center">
+            <h3 id="modalTitle" class="text-xl font-semibold mb-4 text-gray-800"></h3>
+            <p id="modalMessage" class="text-gray-600 mb-6"></p>
+            <button id="closeModalBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-5 rounded-md transition duration-300 ease-in-out">
+                OK
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Array para armazenar as denúncias (simulando um banco de dados)
+        let denuncias = [];
+        let nextId = 1; // Contador para IDs únicos
+
+        // Referências aos elementos do DOM
+        const denunciaForm = document.getElementById('denunciaForm');
+        const listaDenuncias = document.getElementById('listaDenuncias');
+        const gerarAleatorioBtn = document.getElementById('gerarAleatorioBtn');
+        const noDenunciasMessage = document.getElementById('noDenunciasMessage');
+        const messageModal = document.getElementById('messageModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalMessage = document.getElementById('modalMessage');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+
+        // Função para exibir o modal de mensagem
+        function showMessageModal(title, message) {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            messageModal.classList.remove('hidden');
+        }
+
+        // Event listener para fechar o modal
+        closeModalBtn.addEventListener('click', () => {
+            messageModal.classList.add('hidden');
+        });
+
+        // Função para renderizar as denúncias na lista
+        function renderDenuncias() {
+            listaDenuncias.innerHTML = ''; // Limpa a lista antes de renderizar
+            if (denuncias.length === 0) {
+                noDenunciasMessage.classList.remove('hidden');
+                return;
+            } else {
+                noDenunciasMessage.classList.add('hidden');
+            }
+
+            denuncias.forEach(denuncia => {
+                const denunciaDiv = document.createElement('div');
+                denunciaDiv.id = `denuncia-${denuncia.id}`; // Adiciona ID para fácil manipulação
+                denunciaDiv.className = `bg-gray-50 p-5 rounded-lg shadow-sm border border-gray-200 ${
+                    denuncia.status === 'Resolvido' ? 'border-green-400 bg-green-50' :
+                    denuncia.status === 'Em Análise' ? 'border-yellow-400 bg-yellow-50' :
+                    'border-red-400 bg-red-50'
+                }`;
+
+                denunciaDiv.innerHTML = `
+                    <h3 class="text-lg font-semibold text-gray-800 mb-2">${denuncia.categoria}</h3>
+                    <p class="text-gray-700 mb-2">${denuncia.descricao}</p>
+                    <p class="text-gray-600 text-sm mb-2"><strong>Localização:</strong> ${denuncia.localizacao}</p>
+                    <p class="text-gray-600 text-sm mb-2"><strong>Data:</strong> ${new Date(denuncia.data).toLocaleString()}</p>
+                    <p class="text-gray-600 text-sm mb-4"><strong>Status:</strong> <span class="font-bold ${
+                        denuncia.status === 'Resolvido' ? 'text-green-600' :
+                        denuncia.status === 'Em Análise' ? 'text-yellow-600' :
+                        'text-red-600'
+                    }">${denuncia.status}</span></p>
+                    <div class="flex flex-wrap gap-2">
+                        <button data-id="${denuncia.id}" data-status="Em Análise" class="update-status-btn bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out">
+                            Marcar como Em Análise
+                        </button>
+                        <button data-id="${denuncia.id}" data-status="Resolvido" class="update-status-btn bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out">
+                            Marcar como Resolvido
+                        </button>
+                        <button data-id="${denuncia.id}" data-status="Pendente" class="update-status-btn bg-red-500 hover:bg-red-600 text-white text-xs font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out">
+                            Marcar como Pendente
+                        </button>
+                    </div>
+                `;
+                listaDenuncias.appendChild(denunciaDiv);
+            });
+
+            // Adiciona event listeners para os botões de status
+            document.querySelectorAll('.update-status-btn').forEach(button => {
+                button.addEventListener('click', (event) => {
+                    const id = parseInt(event.target.dataset.id);
+                    const newStatus = event.target.dataset.status;
+                    updateDenunciaStatus(id, newStatus);
+                });
+            });
+        }
+
+        // Função para adicionar uma nova denúncia
+        denunciaForm.addEventListener('submit', (event) => {
+            event.preventDefault(); // Impede o recarregamento da página
+
+            const descricao = document.getElementById('descricao').value;
+            const categoria = document.getElementById('categoria').value;
+            const localizacao = document.getElementById('localizacao').value;
+
+            if (!descricao || !categoria || !localizacao) {
+                showMessageModal('Erro de Preenchimento', 'Por favor, preencha todos os campos da denúncia.');
+                return;
+            }
+
+            const novaDenuncia = {
+                id: nextId++,
+                descricao,
+                categoria,
+                localizacao,
+                data: new Date().toISOString(),
+                status: 'Pendente' // Status inicial
+            };
+
+            denuncias.unshift(novaDenuncia); // Adiciona a nova denúncia no início da lista
+            renderDenuncias(); // Atualiza a exibição
+
+            denunciaForm.reset(); // Limpa o formulário
+            showMessageModal('Sucesso!', 'Denúncia registrada com sucesso!');
+        });
+
+        // Função para atualizar o status de uma denúncia
+        function updateDenunciaStatus(id, newStatus) {
+            const denunciaIndex = denuncias.findIndex(d => d.id === id);
+            if (denunciaIndex !== -1) {
+                denuncias[denunciaIndex].status = newStatus;
+                renderDenuncias(); // Re-renderiza a lista para refletir a mudança
+                showMessageModal('Status Atualizado', `O status da denúncia #${id} foi atualizado para "${newStatus}".`);
+            }
+        }
+
+        // Função para gerar uma denúncia aleatória
+        gerarAleatorioBtn.addEventListener('click', () => {
+            const descricoes = [
+                "Buraco perigoso na esquina",
+                "Poste de luz queimado",
+                "Acúmulo de lixo na calçada",
+                "Árvore com galhos caindo",
+                "Calçada quebrada em frente à escola",
+                "Sinal de trânsito apagado",
+                "Vazamento de água na rua"
+            ];
+            const categorias = [
+                "Buraco na Via", "Iluminação Pública", "Descarte de Lixo Irregular",
+                "Calçada Danificada", "Árvore Caída/Poda", "Sinalização Danificada", "Outro"
+            ];
+            const localizacoes = [
+                "Rua A, 100", "Avenida B, 250", "Praça C, perto do banco",
+                "Travessa D, em frente à padaria", "Alameda E, próximo ao parque"
+            ];
+            const statuses = ["Pendente", "Em Análise", "Resolvido"];
+
+            const randomDescricao = descricoes[Math.floor(Math.random() * descricoes.length)];
+            const randomCategoria = categorias[Math.floor(Math.random() * categorias.length)];
+            const randomLocalizacao = localizacoes[Math.floor(Math.random() * localizacoes.length)];
+            const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
+
+            const novaDenuncia = {
+                id: nextId++,
+                descricao: randomDescricao,
+                categoria: randomCategoria,
+                localizacao: randomLocalizacao,
+                data: new Date().toISOString(),
+                status: randomStatus
+            };
+
+            denuncias.unshift(novaDenuncia);
+            renderDenuncias();
+            showMessageModal('Denúncia Aleatória Gerada', 'Uma denúncia aleatória foi adicionada à lista.');
+        });
+
+        // Renderiza as denúncias ao carregar a página (se houver alguma)
+        document.addEventListener('DOMContentLoaded', renderDenuncias);
+    </script>
+</body>
+</html>
