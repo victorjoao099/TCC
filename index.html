@@ -6,6 +6,9 @@
     <title>Sistema de Denúncias de Infraestrutura Urbana</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.5.0/css/ol.css" type="text/css">
+    
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -25,6 +28,15 @@
         }
         ::-webkit-scrollbar-thumb:hover {
             background: #64748b;
+        }
+        /* Estilo para o mapa */
+        #mapid {
+            height: 300px; /* Altura fixa para o mapa */
+            width: 100%;
+            border-radius: 0.5rem; /* rounded-md do Tailwind */
+            margin-top: 1rem;
+            margin-bottom: 1rem;
+            border: 1px solid #cbd5e0; /* Adiciona uma borda sutil */
         }
     </style>
 </head>
@@ -57,7 +69,11 @@
                 </div>
                 <div>
                     <label for="localizacao" class="block text-gray-700 text-sm font-medium mb-1">Localização (Endereço/Ponto de Referência):</label>
-                    <input type="text" id="localizacao" class="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out" placeholder="Ex: Rua das Rosas, 456, Centro" required>
+                    <input type="text" id="localizacao" class="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out" placeholder="Clique no mapa para selecionar ou digite o endereço." required>
+                    <input type="hidden" id="latitude" name="latitude">
+                    <input type="hidden" id="longitude" name="longitude">
+                    <p class="text-sm text-gray-500 mt-1">Clique no mapa abaixo para definir a localização exata da denúncia.</p>
+                    <div id="mapid" class="rounded-md"></div>
                 </div>
                 <div class="flex flex-col sm:flex-row gap-4">
                     <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-md shadow-md transition duration-300 ease-in-out transform hover:scale-105">
@@ -88,6 +104,8 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.5.0/build/ol.js"></script>
+    
     <script>
         // Array para armazenar as denúncias (simulando um banco de dados)
         let denuncias = [];
@@ -102,6 +120,15 @@
         const modalTitle = document.getElementById('modalTitle');
         const modalMessage = document.getElementById('modalMessage');
         const closeModalBtn = document.getElementById('closeModalBtn');
+        const latInput = document.getElementById('latitude');
+        const lonInput = document.getElementById('longitude');
+        const localizacaoInput = document.getElementById('localizacao');
+
+        // Variável para armazenar o mapa OpenLayers
+        let map;
+        let vectorSource; // Fonte para os marcadores das denúncias
+        let vectorLayer; // Camada para os marcadores das denúncias
+        let currentMarker; // Marcador temporário para seleção no mapa
 
         // Função para exibir o modal de mensagem
         function showMessageModal(title, message) {
@@ -115,12 +142,120 @@
             messageModal.classList.add('hidden');
         });
 
+        // --- Funções do Mapa (OpenLayers) ---
+        function initMap() {
+            vectorSource = new ol.source.Vector();
+            vectorLayer = new ol.layer.Vector({
+                source: vectorSource,
+                style: new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 6,
+                        fill: new ol.style.Fill({color: 'red'}),
+                        stroke: new ol.style.Stroke({color: 'white', width: 2})
+                    })
+                })
+            });
+
+            map = new ol.Map({
+                target: 'mapid', // ID do div onde o mapa será renderizado
+                layers: [
+                    new ol.layer.Tile({
+                        source: new ol.source.OSM() // Camada base OpenStreetMap
+                    }),
+                    vectorLayer
+                ],
+                view: new ol.View({
+                    center: ol.proj.fromLonLat([-54.6478, -20.4429]), // Centro inicial (Campo Grande, MS - Brasil)
+                    zoom: 12
+                })
+            });
+
+            // Adiciona um evento de clique no mapa
+            map.on('click', function(evt) {
+                const coords = ol.proj.toLonLat(evt.coordinate);
+                latInput.value = coords[1];
+                lonInput.value = coords[0];
+                localizacaoInput.value = `Lat: ${coords[1].toFixed(5)}, Lon: ${coords[0].toFixed(5)} (selecionado no mapa)`;
+
+                // Remove o marcador temporário anterior, se houver
+                if (currentMarker) {
+                    vectorSource.removeFeature(currentMarker);
+                }
+
+                // Adiciona um novo marcador temporário
+                currentMarker = new ol.Feature({
+                    geometry: new ol.geom.Point(ol.proj.fromLonLat(coords))
+                });
+                currentMarker.setStyle(new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 8,
+                        fill: new ol.style.Fill({color: 'blue'}), // Marcador de seleção azul
+                        stroke: new ol.style.Stroke({color: 'white', width: 2})
+                    })
+                }));
+                vectorSource.addFeature(currentMarker);
+            });
+        }
+
+        // Função para adicionar marcadores das denúncias ao mapa
+        function addDenunciaMarkersToMap() {
+            vectorSource.clear(); // Limpa todos os marcadores existentes (incluindo o temporário)
+            currentMarker = null; // Reseta o marcador temporário
+
+            denuncias.forEach(denuncia => {
+                if (denuncia.latitude && denuncia.longitude) {
+                    const iconFeature = new ol.Feature({
+                        geometry: new ol.geom.Point(ol.proj.fromLonLat([denuncia.longitude, denuncia.latitude]))
+                    });
+
+                    iconFeature.setStyle(new ol.style.Style({
+                        image: new ol.style.Circle({
+                            radius: 6,
+                            fill: new ol.style.Fill({
+                                color: denuncia.status === 'Resolvido' ? 'green' :
+                                       denuncia.status === 'Em Análise' ? 'orange' :
+                                       'red'
+                            }),
+                            stroke: new ol.style.Stroke({color: 'white', width: 2})
+                        })
+                    }));
+                    iconFeature.setProperties({
+                        'denunciaId': denuncia.id,
+                        'descricao': denuncia.descricao,
+                        'categoria': denuncia.categoria,
+                        'status': denuncia.status
+                    });
+
+                    vectorSource.addFeature(iconFeature);
+                }
+            });
+
+            // Adicionar interatividade aos marcadores se necessário (popup de informações)
+            // Um exemplo simples:
+            map.on('click', function(evt) {
+                map.forEachFeatureAtPixel(evt.pixel, function (feature, layer) {
+                    if (feature.get('denunciaId')) { // Se for um marcador de denúncia
+                        const props = feature.getProperties();
+                        const info = `
+                            <strong>ID:</strong> ${props.denunciaId}<br>
+                            <strong>Categoria:</strong> ${props.categoria}<br>
+                            <strong>Descrição:</strong> ${props.descricao}<br>
+                            <strong>Status:</strong> ${props.status}
+                        `;
+                        // Em um sistema real, aqui você mostraria um popup mais elaborado.
+                        showMessageModal('Detalhes da Denúncia', info);
+                    }
+                });
+            });
+        }
+        // --- Fim das Funções do Mapa ---
+
+
         // Função para renderizar as denúncias na lista
         function renderDenuncias() {
             listaDenuncias.innerHTML = ''; // Limpa a lista antes de renderizar
             if (denuncias.length === 0) {
                 noDenunciasMessage.classList.remove('hidden');
-                return;
             } else {
                 noDenunciasMessage.classList.add('hidden');
             }
@@ -137,7 +272,7 @@
                 denunciaDiv.innerHTML = `
                     <h3 class="text-lg font-semibold text-gray-800 mb-2">${denuncia.categoria}</h3>
                     <p class="text-gray-700 mb-2">${denuncia.descricao}</p>
-                    <p class="text-gray-600 text-sm mb-2"><strong>Localização:</strong> ${denuncia.localizacao}</p>
+                    <p class="text-gray-600 text-sm mb-2"><strong>Localização:</strong> ${denuncia.localizacao} (Lat: ${denuncia.latitude ? denuncia.latitude.toFixed(5) : 'N/A'}, Lon: ${denuncia.longitude ? denuncia.longitude.toFixed(5) : 'N/A'})</p>
                     <p class="text-gray-600 text-sm mb-2"><strong>Data:</strong> ${new Date(denuncia.data).toLocaleString()}</p>
                     <p class="text-gray-600 text-sm mb-4"><strong>Status:</strong> <span class="font-bold ${
                         denuncia.status === 'Resolvido' ? 'text-green-600' :
@@ -145,19 +280,22 @@
                         'text-red-600'
                     }">${denuncia.status}</span></p>
                     <div class="flex flex-wrap gap-2">
-                        <button data-id="${denuncia.id}" data-status="Em Análise" class="update-status-btn bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out">
+                        <button data-id="${denuncia.id}" data-status="Em Análise" class="update-status-btn bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out">
                             Marcar como Em Análise
                         </button>
-                        <button data-id="${denuncia.id}" data-status="Resolvido" class="update-status-btn bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out">
+                        <button data-id="${denuncia.id}" data-status="Resolvido" class="update-status-btn bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out">
                             Marcar como Resolvido
                         </button>
-                        <button data-id="${denuncia.id}" data-status="Pendente" class="update-status-btn bg-red-500 hover:bg-red-600 text-white text-xs font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out">
+                        <button data-id="${denuncia.id}" data-status="Pendente" class="update-status-btn bg-red-500 hover:bg-red-600 text-white text-xs font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out">
                             Marcar como Pendente
                         </button>
                     </div>
                 `;
                 listaDenuncias.appendChild(denunciaDiv);
             });
+            
+            // Re-renderiza os marcadores no mapa após atualizar a lista
+            addDenunciaMarkersToMap();
 
             // Adiciona event listeners para os botões de status
             document.querySelectorAll('.update-status-btn').forEach(button => {
@@ -175,10 +313,12 @@
 
             const descricao = document.getElementById('descricao').value;
             const categoria = document.getElementById('categoria').value;
-            const localizacao = document.getElementById('localizacao').value;
+            const localizacao = localizacaoInput.value;
+            const latitude = parseFloat(latInput.value);
+            const longitude = parseFloat(lonInput.value);
 
-            if (!descricao || !categoria || !localizacao) {
-                showMessageModal('Erro de Preenchimento', 'Por favor, preencha todos os campos da denúncia.');
+            if (!descricao || !categoria || !localizacao || isNaN(latitude) || isNaN(longitude)) {
+                showMessageModal('Erro de Preenchimento', 'Por favor, preencha todos os campos e selecione a localização no mapa.');
                 return;
             }
 
@@ -187,6 +327,8 @@
                 descricao,
                 categoria,
                 localizacao,
+                latitude,
+                longitude,
                 data: new Date().toISOString(),
                 status: 'Pendente' // Status inicial
             };
@@ -195,6 +337,13 @@
             renderDenuncias(); // Atualiza a exibição
 
             denunciaForm.reset(); // Limpa o formulário
+            latInput.value = ''; // Limpa as coordenadas selecionadas
+            lonInput.value = '';
+            // Remove o marcador temporário após o envio
+            if (currentMarker) {
+                vectorSource.removeFeature(currentMarker);
+                currentMarker = null;
+            }
             showMessageModal('Sucesso!', 'Denúncia registrada com sucesso!');
         });
 
@@ -203,7 +352,7 @@
             const denunciaIndex = denuncias.findIndex(d => d.id === id);
             if (denunciaIndex !== -1) {
                 denuncias[denunciaIndex].status = newStatus;
-                renderDenuncias(); // Re-renderiza a lista para refletir a mudança
+                renderDenuncias(); // Re-renderiza a lista e os marcadores para refletir a mudança
                 showMessageModal('Status Atualizado', `O status da denúncia #${id} foi atualizado para "${newStatus}".`);
             }
         }
@@ -223,33 +372,41 @@
                 "Buraco na Via", "Iluminação Pública", "Descarte de Lixo Irregular",
                 "Calçada Danificada", "Árvore Caída/Poda", "Sinalização Danificada", "Outro"
             ];
-            const localizacoes = [
-                "Rua A, 100", "Avenida B, 250", "Praça C, perto do banco",
-                "Travessa D, em frente à padaria", "Alameda E, próximo ao parque"
+            const localizacoesPredef = [
+                { text: "Rua A, 100", lat: -20.45, lon: -54.65 },
+                { text: "Avenida B, 250", lat: -20.43, lon: -54.67 },
+                { text: "Praça C, perto do banco", lat: -20.46, lon: -54.63 },
+                { text: "Travessa D, em frente à padaria", lat: -20.44, lon: -54.66 },
+                { text: "Alameda E, próximo ao parque", lat: -20.42, lon: -54.64 }
             ];
             const statuses = ["Pendente", "Em Análise", "Resolvido"];
 
             const randomDescricao = descricoes[Math.floor(Math.random() * descricoes.length)];
             const randomCategoria = categorias[Math.floor(Math.random() * categorias.length)];
-            const randomLocalizacao = localizacoes[Math.floor(Math.random() * localizacoes.length)];
+            const randomLocData = localizacoesPredef[Math.floor(Math.random() * localizacoesPredef.length)];
             const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
 
             const novaDenuncia = {
                 id: nextId++,
                 descricao: randomDescricao,
                 categoria: randomCategoria,
-                localizacao: randomLocalizacao,
+                localizacao: randomLocData.text,
+                latitude: randomLocData.lat,
+                longitude: randomLocData.lon,
                 data: new Date().toISOString(),
                 status: randomStatus
             };
 
             denuncias.unshift(novaDenuncia);
             renderDenuncias();
-            showMessageModal('Denúncia Aleatória Gerada', 'Uma denúncia aleatória foi adicionada à lista.');
+            showMessageModal('Denúncia Aleatória Gerada', 'Uma denúncia aleatória com localização no mapa foi adicionada à lista.');
         });
 
-        // Renderiza as denúncias ao carregar a página (se houver alguma)
-        document.addEventListener('DOMContentLoaded', renderDenuncias);
+        // Inicializa o mapa quando a página é carregada
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            renderDenuncias(); // Renderiza as denúncias existentes (se houver) e os marcadores
+        });
     </script>
 </body>
 </html>
