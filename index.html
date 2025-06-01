@@ -107,9 +107,12 @@
     <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.5.0/build/ol.js"></script>
     
     <script>
-        // Array para armazenar as denúncias (simulando um banco de dados)
-        let denuncias = [];
-        let nextId = 1; // Contador para IDs únicos
+        // Chave para localStorage
+        const LOCAL_STORAGE_KEY = 'denunciasInfraUrbana';
+
+        // Array para armazenar as denúncias (carregado do localStorage)
+        let denuncias = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY)) || [];
+        let nextId = denuncias.length > 0 ? Math.max(...denuncias.map(d => d.id)) + 1 : 1; // Garante ID único
 
         // Referências aos elementos do DOM
         const denunciaForm = document.getElementById('denunciaForm');
@@ -129,6 +132,11 @@
         let vectorSource; // Fonte para os marcadores das denúncias
         let vectorLayer; // Camada para os marcadores das denúncias
         let currentMarker; // Marcador temporário para seleção no mapa
+
+        // Função para salvar denúncias no localStorage
+        function saveDenuncias() {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(denuncias));
+        }
 
         // Função para exibir o modal de mensagem
         function showMessageModal(title, message) {
@@ -223,7 +231,9 @@
                         'denunciaId': denuncia.id,
                         'descricao': denuncia.descricao,
                         'categoria': denuncia.categoria,
-                        'status': denuncia.status
+                        'status': denuncia.status,
+                        'localizacao': denuncia.localizacao,
+                        'data': denuncia.data
                     });
 
                     vectorSource.addFeature(iconFeature);
@@ -231,25 +241,24 @@
             });
 
             // Adicionar interatividade aos marcadores se necessário (popup de informações)
-            // Um exemplo simples:
             map.on('click', function(evt) {
                 map.forEachFeatureAtPixel(evt.pixel, function (feature, layer) {
-                    if (feature.get('denunciaId')) { // Se for um marcador de denúncia
+                    if (feature && feature.get('denunciaId')) { // Se for um marcador de denúncia
                         const props = feature.getProperties();
                         const info = `
                             <strong>ID:</strong> ${props.denunciaId}<br>
                             <strong>Categoria:</strong> ${props.categoria}<br>
                             <strong>Descrição:</strong> ${props.descricao}<br>
+                            <strong>Localização:</strong> ${props.localizacao}<br>
+                            <strong>Data:</strong> ${new Date(props.data).toLocaleString()}<br>
                             <strong>Status:</strong> ${props.status}
                         `;
-                        // Em um sistema real, aqui você mostraria um popup mais elaborado.
                         showMessageModal('Detalhes da Denúncia', info);
                     }
                 });
             });
         }
         // --- Fim das Funções do Mapa ---
-
 
         // Função para renderizar as denúncias na lista
         function renderDenuncias() {
@@ -274,7 +283,7 @@
                     <p class="text-gray-700 mb-2">${denuncia.descricao}</p>
                     <p class="text-gray-600 text-sm mb-2"><strong>Localização:</strong> ${denuncia.localizacao} (Lat: ${denuncia.latitude ? denuncia.latitude.toFixed(5) : 'N/A'}, Lon: ${denuncia.longitude ? denuncia.longitude.toFixed(5) : 'N/A'})</p>
                     <p class="text-gray-600 text-sm mb-2"><strong>Data:</strong> ${new Date(denuncia.data).toLocaleString()}</p>
-                    <p class="text-gray-600 text-sm mb-4"><strong>Status:</strong> <span class="font-bold ${
+                    <p class="text-600 text-sm mb-4"><strong>Status:</strong> <span class="font-bold ${
                         denuncia.status === 'Resolvido' ? 'text-green-600' :
                         denuncia.status === 'Em Análise' ? 'text-yellow-600' :
                         'text-red-600'
@@ -296,15 +305,7 @@
             
             // Re-renderiza os marcadores no mapa após atualizar a lista
             addDenunciaMarkersToMap();
-
-            // Adiciona event listeners para os botões de status
-            document.querySelectorAll('.update-status-btn').forEach(button => {
-                button.addEventListener('click', (event) => {
-                    const id = parseInt(event.target.dataset.id);
-                    const newStatus = event.target.dataset.status;
-                    updateDenunciaStatus(id, newStatus);
-                });
-            });
+            saveDenuncias(); // Salva as denúncias no localStorage após renderizar
         }
 
         // Função para adicionar uma nova denúncia
@@ -334,7 +335,7 @@
             };
 
             denuncias.unshift(novaDenuncia); // Adiciona a nova denúncia no início da lista
-            renderDenuncias(); // Atualiza a exibição
+            renderDenuncias(); // Atualiza a exibição (e salva no localStorage)
 
             denunciaForm.reset(); // Limpa o formulário
             latInput.value = ''; // Limpa as coordenadas selecionadas
@@ -352,7 +353,7 @@
             const denunciaIndex = denuncias.findIndex(d => d.id === id);
             if (denunciaIndex !== -1) {
                 denuncias[denunciaIndex].status = newStatus;
-                renderDenuncias(); // Re-renderiza a lista e os marcadores para refletir a mudança
+                renderDenuncias(); // Re-renderiza a lista e os marcadores (e salva no localStorage)
                 showMessageModal('Status Atualizado', `O status da denúncia #${id} foi atualizado para "${newStatus}".`);
             }
         }
@@ -398,7 +399,7 @@
             };
 
             denuncias.unshift(novaDenuncia);
-            renderDenuncias();
+            renderDenuncias(); // Atualiza a exibição (e salva no localStorage)
             showMessageModal('Denúncia Aleatória Gerada', 'Uma denúncia aleatória com localização no mapa foi adicionada à lista.');
         });
 
@@ -406,6 +407,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             initMap();
             renderDenuncias(); // Renderiza as denúncias existentes (se houver) e os marcadores
+            // O dashboard será atualizado pela função renderDenuncias()
         });
     </script>
 </body>
