@@ -38,13 +38,53 @@
             margin-bottom: 1rem;
             border: 1px solid #cbd5e0; /* Adiciona uma borda sutil */
         }
+        /* Estilo para a imagem de denúncia (apenas para o modal de detalhes do mapa) */
+        .denuncia-image {
+            max-width: 100%;
+            height: auto;
+            border-radius: 0.375rem; /* rounded-md */
+            margin-top: 0.75rem;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* Estilos para o Modal de Mensagem */
+        #messageModal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.75); /* Overlay escuro */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000; /* Garante que o modal esteja acima de tudo */
+        }
+        #messageModal.hidden {
+            display: none;
+        }
+        #messageModal > div {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+            z-index: 1001; /* Conteúdo do modal acima do overlay */
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col items-center py-8 px-4 sm:px-6 lg:px-8">
     <div class="max-w-4xl w-full bg-white shadow-lg rounded-lg p-6 sm:p-8 space-y-8">
         <header class="text-center">
             <h1 class="text-3xl sm:text-4xl font-bold text-gray-800 mb-2">Sistema de Denúncias de Infraestrutura Urbana</h1>
-            <p class="text-gray-600 text-lg">Reporte e acompanhe problemas na sua cidade.</p>
+            <p class="text-gray-600 text-lg">Reporte um novo problema.</p>
+            <nav class="mt-4">
+                <a href="dashboard.html" class="inline-block bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out">
+                    Ir para o Dashboard (Gestão)
+                </a>
+            </nav>
         </header>
 
         <section class="bg-blue-50 p-6 rounded-lg shadow-md">
@@ -75,6 +115,11 @@
                     <p class="text-sm text-gray-500 mt-1">Clique no mapa abaixo para definir a localização exata da denúncia.</p>
                     <div id="mapid" class="rounded-md"></div>
                 </div>
+                <div>
+                    <label for="imagem" class="block text-gray-700 text-sm font-medium mb-1">Anexar Imagem (Opcional):</label>
+                    <input type="file" id="imagem" accept="image/*" class="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out">
+                    <p class="text-xs text-gray-500 mt-1">Imagens grandes podem afetar o desempenho e o armazenamento local.</p>
+                </div>
                 <div class="flex flex-col sm:flex-row gap-4">
                     <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-md shadow-md transition duration-300 ease-in-out transform hover:scale-105">
                         Registrar Denúncia
@@ -86,13 +131,7 @@
             </form>
         </section>
 
-        <section class="bg-white p-6 rounded-lg shadow-md">
-            <h2 class="text-2xl font-semibold text-gray-800 mb-4">Denúncias Registradas</h2>
-            <div id="listaDenuncias" class="space-y-4">
-                <p class="text-center text-gray-500" id="noDenunciasMessage">Nenhuma denúncia registrada ainda.</p>
-            </div>
-        </section>
-    </div>
+        </div>
 
     <div id="messageModal" class="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50 hidden">
         <div class="bg-white p-8 rounded-lg shadow-xl max-w-sm w-full text-center">
@@ -107,6 +146,8 @@
     <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.5.0/build/ol.js"></script>
     
     <script>
+        console.log("Script iniciado: DOMContentLoaded."); // Log de início
+
         // Chave para localStorage
         const LOCAL_STORAGE_KEY = 'denunciasInfraUrbana';
 
@@ -116,9 +157,7 @@
 
         // Referências aos elementos do DOM
         const denunciaForm = document.getElementById('denunciaForm');
-        const listaDenuncias = document.getElementById('listaDenuncias');
         const gerarAleatorioBtn = document.getElementById('gerarAleatorioBtn');
-        const noDenunciasMessage = document.getElementById('noDenunciasMessage');
         const messageModal = document.getElementById('messageModal');
         const modalTitle = document.getElementById('modalTitle');
         const modalMessage = document.getElementById('modalMessage');
@@ -126,6 +165,7 @@
         const latInput = document.getElementById('latitude');
         const lonInput = document.getElementById('longitude');
         const localizacaoInput = document.getElementById('localizacao');
+        const imagemInput = document.getElementById('imagem'); // Novo input de imagem
 
         // Variável para armazenar o mapa OpenLayers
         let map;
@@ -135,23 +175,42 @@
 
         // Função para salvar denúncias no localStorage
         function saveDenuncias() {
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(denuncias));
+            try {
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(denuncias));
+                console.log("Denúncias salvas no localStorage.");
+            } catch (e) {
+                console.error("Erro ao salvar denúncias no localStorage:", e);
+                // Pode exibir um alerta para o usuário se o localStorage estiver cheio
+                showMessageModal('Erro de Armazenamento', 'Não foi possível salvar os dados localmente. O armazenamento pode estar cheio.');
+            }
         }
 
         // Função para exibir o modal de mensagem
         function showMessageModal(title, message) {
+            console.log(`Tentando exibir modal: ${title} - ${message}`);
+            if (!messageModal) {
+                console.error("Erro: Elemento messageModal não encontrado.");
+                return;
+            }
             modalTitle.textContent = title;
             modalMessage.textContent = message;
-            messageModal.classList.remove('hidden');
+            // Adicionado setTimeout para garantir que a classe 'hidden' seja removida após a renderização
+            setTimeout(() => {
+                messageModal.classList.remove('hidden');
+                console.log("Modal exibido.");
+            }, 50); // Pequeno atraso de 50ms
         }
 
         // Event listener para fechar o modal
         closeModalBtn.addEventListener('click', () => {
+            console.log("Botão OK do modal clicado.");
             messageModal.classList.add('hidden');
+            console.log("Modal escondido.");
         });
 
         // --- Funções do Mapa (OpenLayers) ---
         function initMap() {
+            console.log("Inicializando mapa...");
             vectorSource = new ol.source.Vector();
             vectorLayer = new ol.layer.Vector({
                 source: vectorSource,
@@ -177,9 +236,11 @@
                     zoom: 12
                 })
             });
+            console.log("Mapa inicializado.");
 
-            // Adiciona um evento de clique no mapa
+            // Adiciona um evento de clique no mapa para selecionar a localização da denúncia
             map.on('click', function(evt) {
+                console.log("Clique no mapa detectado para seleção de localização.");
                 const coords = ol.proj.toLonLat(evt.coordinate);
                 latInput.value = coords[1];
                 lonInput.value = coords[0];
@@ -190,7 +251,7 @@
                     vectorSource.removeFeature(currentMarker);
                 }
 
-                // Adiciona um novo marcador temporário
+                // Adiciona um novo marcador temporário para a seleção atual
                 currentMarker = new ol.Feature({
                     geometry: new ol.geom.Point(ol.proj.fromLonLat(coords))
                 });
@@ -202,13 +263,42 @@
                     })
                 }));
                 vectorSource.addFeature(currentMarker);
+                console.log("Localização selecionada no mapa e marcador temporário adicionado.");
+            });
+
+            // Adiciona um evento de clique no mapa para interagir com os marcadores de denúncias existentes
+            map.on('click', function(evt) {
+                console.log("Clique no mapa para detalhes de feature detectado.");
+                // Itera sobre as features no pixel clicado
+                map.forEachFeatureAtPixel(evt.pixel, function (feature, layer) {
+                    // Verifica se a feature clicada é um marcador de denúncia (tem a propriedade 'denunciaId')
+                    if (feature && feature.get('denunciaId')) { 
+                        const props = feature.getProperties();
+                        let info = `
+                            <strong>ID:</strong> ${props.denunciaId}<br>
+                            <strong>Categoria:</strong> ${props.categoria}<br>
+                            <strong>Descrição:</strong> ${props.descricao}<br>
+                            <strong>Localização:</strong> ${props.localizacao}<br>
+                            <strong>Data:</strong> ${new Date(props.data).toLocaleString()}<br>
+                            <strong>Status:</strong> ${props.status}
+                        `;
+                        // Se houver imagem, adiciona ao popup
+                        if (props.imagem) {
+                            info += `<br><img src="${props.imagem}" class="denuncia-image mt-2" style="max-width: 150px; height: auto;">`;
+                        }
+                        showMessageModal('Detalhes da Denúncia', info);
+                        console.log("Detalhes da denúncia exibidos no modal.");
+                    }
+                });
             });
         }
 
         // Função para adicionar marcadores das denúncias ao mapa
         function addDenunciaMarkersToMap() {
-            vectorSource.clear(); // Limpa todos os marcadores existentes (incluindo o temporário)
-            currentMarker = null; // Reseta o marcador temporário
+            console.log("Adicionando marcadores das denúncias ao mapa...");
+            // Limpa apenas os marcadores de denúncias existentes, mantendo o marcador de seleção temporário
+            const featuresToRemove = vectorSource.getFeatures().filter(f => f !== currentMarker);
+            featuresToRemove.forEach(f => vectorSource.removeFeature(f));
 
             denuncias.forEach(denuncia => {
                 if (denuncia.latitude && denuncia.longitude) {
@@ -233,83 +323,23 @@
                         'categoria': denuncia.categoria,
                         'status': denuncia.status,
                         'localizacao': denuncia.localizacao,
-                        'data': denuncia.data
+                        'data': denuncia.data,
+                        'imagem': denuncia.imagem || null // Adiciona a imagem às propriedades
                     });
 
                     vectorSource.addFeature(iconFeature);
                 }
             });
-
-            // Adicionar interatividade aos marcadores se necessário (popup de informações)
-            map.on('click', function(evt) {
-                map.forEachFeatureAtPixel(evt.pixel, function (feature, layer) {
-                    if (feature && feature.get('denunciaId')) { // Se for um marcador de denúncia
-                        const props = feature.getProperties();
-                        const info = `
-                            <strong>ID:</strong> ${props.denunciaId}<br>
-                            <strong>Categoria:</strong> ${props.categoria}<br>
-                            <strong>Descrição:</strong> ${props.descricao}<br>
-                            <strong>Localização:</strong> ${props.localizacao}<br>
-                            <strong>Data:</strong> ${new Date(props.data).toLocaleString()}<br>
-                            <strong>Status:</strong> ${props.status}
-                        `;
-                        showMessageModal('Detalhes da Denúncia', info);
-                    }
-                });
-            });
+            console.log("Marcadores das denúncias atualizados no mapa.");
         }
         // --- Fim das Funções do Mapa ---
 
-        // Função para renderizar as denúncias na lista
-        function renderDenuncias() {
-            listaDenuncias.innerHTML = ''; // Limpa a lista antes de renderizar
-            if (denuncias.length === 0) {
-                noDenunciasMessage.classList.remove('hidden');
-            } else {
-                noDenunciasMessage.classList.add('hidden');
-            }
-
-            denuncias.forEach(denuncia => {
-                const denunciaDiv = document.createElement('div');
-                denunciaDiv.id = `denuncia-${denuncia.id}`; // Adiciona ID para fácil manipulação
-                denunciaDiv.className = `bg-gray-50 p-5 rounded-lg shadow-sm border border-gray-200 ${
-                    denuncia.status === 'Resolvido' ? 'border-green-400 bg-green-50' :
-                    denuncia.status === 'Em Análise' ? 'border-yellow-400 bg-yellow-50' :
-                    'border-red-400 bg-red-50'
-                }`;
-
-                denunciaDiv.innerHTML = `
-                    <h3 class="text-lg font-semibold text-gray-800 mb-2">${denuncia.categoria}</h3>
-                    <p class="text-gray-700 mb-2">${denuncia.descricao}</p>
-                    <p class="text-gray-600 text-sm mb-2"><strong>Localização:</strong> ${denuncia.localizacao} (Lat: ${denuncia.latitude ? denuncia.latitude.toFixed(5) : 'N/A'}, Lon: ${denuncia.longitude ? denuncia.longitude.toFixed(5) : 'N/A'})</p>
-                    <p class="text-gray-600 text-sm mb-2"><strong>Data:</strong> ${new Date(denuncia.data).toLocaleString()}</p>
-                    <p class="text-600 text-sm mb-4"><strong>Status:</strong> <span class="font-bold ${
-                        denuncia.status === 'Resolvido' ? 'text-green-600' :
-                        denuncia.status === 'Em Análise' ? 'text-yellow-600' :
-                        'text-red-600'
-                    }">${denuncia.status}</span></p>
-                    <div class="flex flex-wrap gap-2">
-                        <button data-id="${denuncia.id}" data-status="Em Análise" class="update-status-btn bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out">
-                            Marcar como Em Análise
-                        </button>
-                        <button data-id="${denuncia.id}" data-status="Resolvido" class="update-status-btn bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out">
-                            Marcar como Resolvido
-                        </button>
-                        <button data-id="${denuncia.id}" data-status="Pendente" class="update-status-btn bg-red-500 hover:bg-red-600 text-white text-xs font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out">
-                            Marcar como Pendente
-                        </button>
-                    </div>
-                `;
-                listaDenuncias.appendChild(denunciaDiv);
-            });
-            
-            // Re-renderiza os marcadores no mapa após atualizar a lista
-            addDenunciaMarkersToMap();
-            saveDenuncias(); // Salva as denúncias no localStorage após renderizar
-        }
+        // A função renderDenuncias e updateDenunciaStatus foram movidas para dashboard.html
+        // Para esta página, apenas precisamos salvar as denúncias após o registro.
 
         // Função para adicionar uma nova denúncia
-        denunciaForm.addEventListener('submit', (event) => {
+        denunciaForm.addEventListener('submit', async (event) => {
+            console.log("Formulário de denúncia submetido.");
             event.preventDefault(); // Impede o recarregamento da página
 
             const descricao = document.getElementById('descricao').value;
@@ -317,10 +347,31 @@
             const localizacao = localizacaoInput.value;
             const latitude = parseFloat(latInput.value);
             const longitude = parseFloat(lonInput.value);
+            const imagemFile = imagemInput.files[0]; // Pega o arquivo de imagem
 
             if (!descricao || !categoria || !localizacao || isNaN(latitude) || isNaN(longitude)) {
                 showMessageModal('Erro de Preenchimento', 'Por favor, preencha todos os campos e selecione a localização no mapa.');
+                console.log("Erro de preenchimento ou localização inválida.");
                 return;
+            }
+
+            let imagemBase64 = null;
+            if (imagemFile) {
+                console.log("Arquivo de imagem selecionado. Tentando ler como Base64...");
+                // Lê o arquivo de imagem como Base64
+                try {
+                    imagemBase64 = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(imagemFile);
+                    });
+                    console.log("Imagem lida com sucesso.");
+                } catch (error) {
+                    showMessageModal('Erro de Imagem', 'Não foi possível ler a imagem. Tente novamente ou use uma imagem menor.');
+                    console.error("Erro ao ler imagem:", error);
+                    return;
+                }
             }
 
             const novaDenuncia = {
@@ -331,12 +382,13 @@
                 latitude,
                 longitude,
                 data: new Date().toISOString(),
-                status: 'Pendente' // Status inicial
+                status: 'Pendente', // Status inicial
+                imagem: imagemBase64 // Adiciona a imagem Base64
             };
 
             denuncias.unshift(novaDenuncia); // Adiciona a nova denúncia no início da lista
-            renderDenuncias(); // Atualiza a exibição (e salva no localStorage)
-
+            saveDenuncias(); // Salva as denúncias no localStorage
+            
             denunciaForm.reset(); // Limpa o formulário
             latInput.value = ''; // Limpa as coordenadas selecionadas
             lonInput.value = '';
@@ -345,21 +397,13 @@
                 vectorSource.removeFeature(currentMarker);
                 currentMarker = null;
             }
-            showMessageModal('Sucesso!', 'Denúncia registrada com sucesso!');
+            showMessageModal('Sucesso!', `Denúncia registrada com sucesso! Uma notificação por e-mail foi simulada para o cidadão.`); // Simulação de notificação
+            console.log("Nova denúncia registrada e modal de sucesso exibido.");
         });
-
-        // Função para atualizar o status de uma denúncia
-        function updateDenunciaStatus(id, newStatus) {
-            const denunciaIndex = denuncias.findIndex(d => d.id === id);
-            if (denunciaIndex !== -1) {
-                denuncias[denunciaIndex].status = newStatus;
-                renderDenuncias(); // Re-renderiza a lista e os marcadores (e salva no localStorage)
-                showMessageModal('Status Atualizado', `O status da denúncia #${id} foi atualizado para "${newStatus}".`);
-            }
-        }
 
         // Função para gerar uma denúncia aleatória
         gerarAleatorioBtn.addEventListener('click', () => {
+            console.log("Botão 'Gerar Denúncia Aleatória' clicado.");
             const descricoes = [
                 "Buraco perigoso na esquina",
                 "Poste de luz queimado",
@@ -395,19 +439,31 @@
                 latitude: randomLocData.lat,
                 longitude: randomLocData.lon,
                 data: new Date().toISOString(),
-                status: randomStatus
+                status: randomStatus,
+                imagem: null // Denúncias aleatórias não terão imagem por padrão
             };
 
             denuncias.unshift(novaDenuncia);
-            renderDenuncias(); // Atualiza a exibição (e salva no localStorage)
+            saveDenuncias(); // Salva as denúncias no localStorage
             showMessageModal('Denúncia Aleatória Gerada', 'Uma denúncia aleatória com localização no mapa foi adicionada à lista.');
+            console.log("Denúncia aleatória gerada e modal exibido.");
         });
 
         // Inicializa o mapa quando a página é carregada
         document.addEventListener('DOMContentLoaded', () => {
-            initMap();
-            renderDenuncias(); // Renderiza as denúncias existentes (se houver) e os marcadores
-            // O dashboard será atualizado pela função renderDenuncias()
+            console.log("DOM totalmente carregado. Iniciando.");
+            initMap(); // Inicializa o mapa
+            // Não renderizamos a lista de denúncias aqui, pois ela está no dashboard.html
+            // Mas precisamos carregar os marcadores no mapa se houver denúncias salvas.
+            addDenunciaMarkersToMap(); 
+            
+            // Verifica se os elementos do modal foram encontrados no DOM
+            if (messageModal && modalTitle && modalMessage && closeModalBtn) {
+                console.log("Elementos do modal encontrados no DOM.");
+            } else {
+                console.error("Erro: Um ou mais elementos do modal não foram encontrados no DOM ao carregar a página.");
+            }
+            console.log("Inicialização completa.");
         });
     </script>
 </body>

@@ -26,13 +26,47 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #64748b;
         }
+        /* Estilo para a imagem de denúncia */
+        .denuncia-image {
+            max-width: 100%;
+            height: auto;
+            border-radius: 0.375rem; /* rounded-md */
+            margin-top: 0.75rem;
+            border: 1px solid #e2e8f0;
+        }
+        /* Estilos para o Modal de Mensagem */
+        #messageModal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.75); /* Overlay escuro */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000; /* Garante que o modal esteja acima de tudo */
+        }
+        #messageModal.hidden {
+            display: none;
+        }
+        #messageModal > div {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+            z-index: 1001; /* Conteúdo do modal acima do overlay */
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col items-center py-8 px-4 sm:px-6 lg:px-8">
     <div class="max-w-4xl w-full bg-white shadow-lg rounded-lg p-6 sm:p-8 space-y-8">
         <header class="text-center">
             <h1 class="text-3xl sm:text-4xl font-bold text-gray-800 mb-2">Dashboard Governamental</h1>
-            <p class="text-gray-600 text-lg">Visão geral e exportação de dados das denúncias de infraestrutura.</p>
+            <p class="text-gray-600 text-lg">Visão geral e gestão das denúncias de infraestrutura.</p>
             <nav class="mt-4">
                 <a href="index.html" class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out">
                     Voltar para o Sistema de Denúncias
@@ -65,6 +99,13 @@
                 Exportar Dados (CSV)
             </button>
         </section>
+
+        <section class="bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4">Denúncias Registradas</h2>
+            <div id="listaDenuncias" class="space-y-4">
+                <p class="text-center text-gray-500" id="noDenunciasMessage">Nenhuma denúncia registrada ainda.</p>
+            </div>
+        </section>
     </div>
 
     <div id="messageModal" class="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50 hidden">
@@ -94,17 +135,40 @@
         const modalTitle = document.getElementById('modalTitle');
         const modalMessage = document.getElementById('modalMessage');
         const closeModalBtn = document.getElementById('closeModalBtn');
+        const listaDenuncias = document.getElementById('listaDenuncias'); // Adicionado
+        const noDenunciasMessage = document.getElementById('noDenunciasMessage'); // Adicionado
+
+        // Função para salvar denúncias no localStorage
+        function saveDenuncias() {
+            try {
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(denuncias));
+                console.log("Denúncias salvas no localStorage.");
+            } catch (e) {
+                console.error("Erro ao salvar denúncias no localStorage:", e);
+                showMessageModal('Erro de Armazenamento', 'Não foi possível salvar os dados localmente. O armazenamento pode estar cheio.');
+            }
+        }
 
         // Função para exibir o modal de mensagem
         function showMessageModal(title, message) {
+            console.log(`Tentando exibir modal: ${title} - ${message}`);
+            if (!messageModal) {
+                console.error("Erro: Elemento messageModal não encontrado.");
+                return;
+            }
             modalTitle.textContent = title;
             modalMessage.textContent = message;
-            messageModal.classList.remove('hidden');
+            setTimeout(() => {
+                messageModal.classList.remove('hidden');
+                console.log("Modal exibido.");
+            }, 50);
         }
 
         // Event listener para fechar o modal
         closeModalBtn.addEventListener('click', () => {
+            console.log("Botão OK do modal clicado.");
             messageModal.classList.add('hidden');
+            console.log("Modal escondido.");
         });
 
         // --- Funções do Dashboard ---
@@ -133,6 +197,74 @@
                 li.textContent = 'Nenhuma denúncia por categoria.';
                 denunciasPorCategoria.appendChild(li);
             }
+            console.log("Dashboard atualizado.");
+        }
+
+        // Função para renderizar as denúncias na lista (Movida para cá)
+        function renderDenuncias() {
+            console.log("Renderizando lista de denúncias no dashboard...");
+            listaDenuncias.innerHTML = ''; // Limpa a lista antes de renderizar
+            if (denuncias.length === 0) {
+                noDenunciasMessage.classList.remove('hidden');
+                console.log("Nenhuma denúncia. Exibindo mensagem 'Nenhuma denúncia registrada ainda'.");
+            } else {
+                noDenunciasMessage.classList.add('hidden');
+                console.log(`Exibindo ${denuncias.length} denúncias.`);
+            }
+
+            denuncias.forEach(denuncia => {
+                const denunciaDiv = document.createElement('div');
+                denunciaDiv.id = `denuncia-${denuncia.id}`; // Adiciona ID para fácil manipulação
+                denunciaDiv.className = `bg-gray-50 p-5 rounded-lg shadow-sm border border-gray-200 ${
+                    denuncia.status === 'Resolvido' ? 'border-green-400 bg-green-50' :
+                    denuncia.status === 'Em Análise' ? 'border-yellow-400 bg-yellow-50' :
+                    'border-red-400 bg-red-50'
+                }`;
+
+                denunciaDiv.innerHTML = `
+                    <h3 class="text-lg font-semibold text-gray-800 mb-2">${denuncia.categoria}</h3>
+                    <p class="text-gray-700 mb-2">${denuncia.descricao}</p>
+                    <p class="text-gray-600 text-sm mb-2"><strong>Localização:</strong> ${denuncia.localizacao} (Lat: ${denuncia.latitude ? denuncia.latitude.toFixed(5) : 'N/A'}, Lon: ${denuncia.longitude ? denuncia.longitude.toFixed(5) : 'N/A'})</p>
+                    <p class="text-gray-600 text-sm mb-2"><strong>Data:</strong> ${new Date(denuncia.data).toLocaleString()}</p>
+                    <p class="text-600 text-sm mb-4"><strong>Status:</strong> <span class="font-bold ${
+                        denuncia.status === 'Resolvido' ? 'text-green-600' :
+                        denuncia.status === 'Em Análise' ? 'text-yellow-600' :
+                        'text-red-600'
+                    }">${denuncia.status}</span></p>
+                    ${denuncia.imagem ? `<img src="${denuncia.imagem}" alt="Imagem da denúncia" class="denuncia-image">` : ''}
+                    <div class="flex flex-wrap gap-2 mt-4">
+                        <button data-id="${denuncia.id}" data-status="Em Análise" class="update-status-btn bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out">
+                            Marcar como Em Análise
+                        </button>
+                        <button data-id="${denuncia.id}" data-status="Resolvido" class="update-status-btn bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out">
+                            Marcar como Resolvido
+                        </button>
+                        <button data-id="${denuncia.id}" data-status="Pendente" class="update-status-btn bg-red-500 hover:bg-red-600 text-white text-xs font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out">
+                            Marcar como Pendente
+                        </button>
+                    </div>
+                `;
+                listaDenuncias.appendChild(denunciaDiv);
+            });
+            
+            updateDashboard(); // Atualiza o dashboard após renderizar a lista
+            saveDenuncias(); // Salva as denúncias no localStorage após renderizar
+            console.log("Lista de denúncias no dashboard renderizada e dados salvos.");
+        }
+
+        // Função para atualizar o status de uma denúncia (Movida para cá)
+        function updateDenunciaStatus(id, newStatus) {
+            console.log(`Tentando atualizar status da denúncia #${id} para ${newStatus}.`);
+            const denunciaIndex = denuncias.findIndex(d => d.id === id);
+            if (denunciaIndex !== -1) {
+                denuncias[denunciaIndex].status = newStatus;
+                renderDenuncias(); // Re-renderiza a lista (e salva no localStorage)
+                console.log(`Chamando showMessageModal de updateDenunciaStatus.`);
+                showMessageModal('Status Atualizado', `O status da denúncia #${id} foi atualizado para "${newStatus}". Uma notificação por e-mail foi simulada para o cidadão.`);
+                console.log(`Status da denúncia #${id} atualizado e modal exibido.`);
+            } else {
+                console.log(`Denúncia #${id} não encontrada.`);
+            }
         }
 
         // Função para exportar dados para CSV
@@ -142,7 +274,7 @@
                 return;
             }
 
-            const headers = ["ID", "Descrição", "Categoria", "Localização", "Latitude", "Longitude", "Data", "Status"];
+            const headers = ["ID", "Descrição", "Categoria", "Localização", "Latitude", "Longitude", "Data", "Status", "Imagem (Base64)"];
             let csv = headers.join(";") + "\n"; // Cabeçalho CSV
 
             denuncias.forEach(denuncia => {
@@ -154,14 +286,15 @@
                     denuncia.latitude,
                     denuncia.longitude,
                     new Date(denuncia.data).toLocaleString(),
-                    denuncia.status
+                    denuncia.status,
+                    `"${denuncia.imagem ? denuncia.imagem.replace(/"/g, '""') : ''}"` 
                 ];
                 csv += row.join(";") + "\n";
             });
 
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
-            if (link.download !== undefined) { // Verifica se o navegador suporta o atributo download
+            if (link.download !== undefined) {
                 const url = URL.createObjectURL(blob);
                 link.setAttribute("href", url);
                 link.setAttribute("download", "denuncias_infraestrutura.csv");
@@ -178,9 +311,29 @@
         exportarDadosBtn.addEventListener('click', exportToCSV);
         // --- Fim das Funções do Dashboard ---
 
-        // Inicializa o dashboard quando a página é carregada
+        // Inicializa o dashboard e renderiza a lista de denúncias quando a página é carregada
         document.addEventListener('DOMContentLoaded', () => {
-            updateDashboard(); // Atualiza o dashboard na carga inicial
+            console.log("DOM totalmente carregado. Iniciando dashboard.");
+            renderDenuncias(); // Carrega e renderiza as denúncias (e atualiza o dashboard)
+            
+            // Verifica se os elementos do modal foram encontrados no DOM
+            if (messageModal && modalTitle && modalMessage && closeModalBtn) {
+                console.log("Elementos do modal encontrados no DOM.");
+            } else {
+                console.error("Erro: Um ou mais elementos do modal não foram encontrados no DOM ao carregar a página.");
+            }
+
+            // Adiciona o event listener delegado para os botões de status na lista de denúncias
+            // Este listener agora está no dashboard.html
+            listaDenuncias.addEventListener('click', (event) => {
+                const target = event.target;
+                if (target.classList.contains('update-status-btn')) {
+                    const id = parseInt(target.dataset.id);
+                    const newStatus = target.dataset.status;
+                    updateDenunciaStatus(id, newStatus);
+                }
+            });
+            console.log("Inicialização completa do dashboard. Listener de delegação de eventos para botões de status adicionado.");
         });
     </script>
 </body>
